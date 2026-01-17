@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>👂 Listening Assessment</h2>
+
+<div class="listening-section">
+    <div class="reference-text">
+        <h3>Listen and repeat what you hear:</h3>
+        <!-- Hide the reference sentence but keep it accessible for JS -->
+        <p id="reference-sentence" class="visually-hidden">{{ reference_text }}</p>
+        
+        <div class="audio-controls">
+            <audio id="reference-audio" controls>
+                <source src="{{ url_for('static', filename=audio_file) }}" type="audio/mpeg">
+                Your browser does not support the audio element.
+            </audio>
+        </div>
+    </div>
+
+    <div class="recording-controls">
+        <button id="startRecord" class="record-btn">🎙️ Start Recording</button>
+        <button id="stopRecord" class="record-btn" disabled>⏹️ Stop Recording</button>
+        <div id="recordingStatus" class="recording-status"></div>
+    </div>
+
+    <div id="result" class="result" style="display: none;">
+        <h3>Evaluation Result:</h3>
+        <div class="grade"></div>
+        <div class="score"></div>
+        <div class="feedback"></div>
+        <div class="comparison">
+            <p><strong>You said:</strong> <span class="spoken-text"></span></p>
+            <p><strong>Expected:</strong> <span class="reference-text"></span></p>
+        </div>
+    </div>
+
+    <button id="nextQuestion" class="next-btn" style="display: none;">Try Another Audio</button>
+</div>
+
+<script>
+let mediaRecorder;
+let audioChunks = [];
+let stream;
+let isRecording = false;
+
+document.getElementById('startRecord').addEventListener('click', async () => {
+    audioChunks = [];
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        
+        mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
+        };
+        
+        mediaRecorder.start(100); // Start recording with 100ms time slices
+        mediaRecorder.requestData(); // Request data immediately
+        
+        isRecording = true;
+        document.getElementById('startRecord').disabled = true;
+        document.getElementById('stopRecord').disabled = false;
+        document.getElementById('recordingStatus').textContent = '🔴 Recording...';
+    } catch (err) {
+        console.error('Error accessing microphone:', err);
+        document.getElementById('recordingStatus').textContent = 'Error: Could not access microphone';
+    }
+});
+
+document.getElementById('stopRecord').addEventListener('click', async () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        try {
+            mediaRecorder.stop();
+            document.getElementById('startRecord').disabled = false;
+            document.getElementById('stopRecord').disabled = true;
+            document.getElementById('recordingStatus').textContent = 'Processing...';
+            isRecording = false;
+
+            // Get reference text from the correct element
+            const referenceText = document.getElementById('reference-sentence');
+            if (!referenceText) {
+                throw new Error('Reference text element not found');
+            }
+
+            // Ensure all tracks are stopped
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+
+            // Create blob and send data
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const formData = new FormData();
+            formData.append('audio', audioBlob);
+            formData.append('reference', referenceText.textContent);
+
+            // Send to server with error handling
+            const response = await fetch('/listening', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            if (!result || result.error) {
+                throw new Error(result.error || 'Invalid response from server');
+            }
+            
+            showResult(result);
+            
+        } catch (error) {
+            console.error('Error processing recording:', error);
+            document.getElementById('recordingStatus').textContent = 
+                `Error: ${error.message || 'Failed to process recording'}`;
+        }
+    }
+});
+
+// Clean up resources on page unload
+window.addEventListener('beforeunload', () => {
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+    }
+});
+
+function showResult(result) {
+    if (!result) {
+        document.getElementById('recordingStatus').textContent = 'Error: No evaluation results received';
+        return;
+    }
+
+    const resultDiv = document.getElementById('result');
+    resultDiv.style.display = 'block';
+    
+    resultDiv.querySelector('.grade').textContent = `Grade: ${result.grade}`;
+    resultDiv.querySelector('.score').textContent = `Score: ${result.score}%`;
+    resultDiv.querySelector('.feedback').textContent = result.feedback;
+    resultDiv.querySelector('.spoken-text').textContent = result.spoken;
+    resultDiv.querySelector('.reference-text').textContent = result.reference;
+    
+    document.getElementById('recordingStatus').textContent = 'Evaluation Complete';
+    document.getElementById('nextQuestion').style.display = 'block';
+}
+
+document.getElementById('nextQuestion').addEventListener('click', () => {
+    window.location.reload();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,426 @@
+:root {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2d2d2d;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --accent: #2196f3;
+    --accent-hover: #1976d2;
+    --error-bg: #4a1010;
+    --error-text: #ff8080;
+    --success-bg: #1a472a;
+    --border-color: #404040;
+}
+
+body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    display: flex;
+}
+
+nav.sidebar {
+    background-color: var(--bg-secondary);
+    width: 250px;
+    height: 100vh;
+    position: fixed;
+    padding: 2rem 0;
+    border-right: 1px solid var(--border-color);
+}
+
+nav.sidebar .logo {
+    text-align: center;
+    padding: 1rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+nav.sidebar a {
+    color: var(--text-primary);
+    text-decoration: none;
+    padding: 1rem 2rem;
+    display: block;
+    transition: background-color 0.2s;
+}
+
+nav.sidebar a:hover {
+    background-color: var(--accent);
+}
+
+nav.sidebar a.active {
+    background-color: var(--accent);
+    border-left: 4px solid var(--text-primary);
+}
+
+main {
+    margin-left: 250px;
+    padding: 2rem;
+    width: calc(100% - 250px);
+}
+
+.error-message {
+    background-color: var(--error-bg);
+    color: var(--error-text);
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.question {
+    background-color: var(--bg-secondary);
+    padding: 1.5rem;
+    border-radius: 4px;
+    margin-bottom: 1.5rem;
+}
+
+textarea, input[type="text"] {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    width: 100%;
+    padding: 0.75rem;
+    margin: 0.5rem 0;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+}
+
+textarea:focus, input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+button {
+    background-color: var(--accent);
+    color: var(--text-primary);
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+button:hover {
+    background-color: var(--accent-hover);
+}
+
+.result {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background-color: var(--bg-secondary);
+    border-radius: 4px;
+    border-left: 4px solid var(--accent);
+}
+
+audio {
+    width: 100%;
+    margin: 1rem 0;
+    background-color: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+.dashboard {
+    padding: 2rem;
+}
+
+.assessment-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-top: 2rem;
+}
+
+.card {
+    background-color: var(--bg-secondary);
+    padding: 2rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+}
+
+.card h2 {
+    margin-top: 0;
+    color: var(--accent);
+}
+
+.card-link {
+    display: inline-block;
+    background-color: var(--accent);
+    color: var(--text-primary);
+    text-decoration: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    margin-top: 1rem;
+    transition: background-color 0.2s;
+}
+
+.card-link:hover {
+    background-color: var(--accent-hover);
+}
+
+.nav-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.logo {
+    text-align: center;
+    padding: 2rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.logo h2 {
+    margin: 0;
+    color: var(--accent);
+}
+
+.logo p {
+    margin: 0.5rem 0 0;
+    color: var (--text-secondary);
+    font-size: 0.9rem;
+}
+
+.admin-form, .login-form {
+    background-color: var(--bg-secondary);
+    padding: 2rem;
+    border-radius: 8px;
+    max-width: 600px;
+    margin: 2rem auto;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.secondary-btn {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    margin-left: 1rem;
+}
+
+.secondary-btn:hover {
+    background-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.success-message {
+    background-color: var(--success-bg);
+    color: var(--text-primary);
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+
+.admin-section {
+    margin-top: auto;
+    padding: 1rem;
+    border-top: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.login-btn, .admin-btn, .logout-btn {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: background-color 0.2s;
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 0.5rem;
+}
+
+.login-btn {
+    background-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.admin-btn {
+    background-color: var(--bg-secondary);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+}
+
+.logout-btn {
+    background-color: var(--error-bg);
+    color: var(--error-text);
+}
+
+.login-btn:hover {
+    background-color: var(--accent-hover);
+}
+
+.admin-btn:hover {
+    background-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.logout-btn:hover {
+    background-color: var(--error-text);
+    color: var(--error-bg);
+}
+
+.flash-messages {
+    margin-bottom: 1rem;
+}
+
+.flash-message {
+    padding: 1rem;
+    border-radius: 4px;
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    border-left: 4px solid var(--accent);
+}
+
+.word-limit {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+}
+
+#word-count {
+    color: var(--accent);
+    font-size: 0.9rem;
+    margin-left: 1rem;
+}
+
+.speaking-section {
+    max-width: 800px;
+    margin: 2rem auto;
+}
+
+.reference-text {
+    background-color: var(--bg-secondary);
+    padding: 1.5rem;
+    border-radius: 4px;
+    margin-bottom: 2rem;
+}
+
+.recording-controls {
+    display: flex;
+    gap: 1rem;
+    margin: 2rem 0;
+}
+
+.record-btn {
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.record-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.recording-status {
+    color: var(--accent);
+    margin-left: 1rem;
+    align-self: center;
+}
+
+.comparison {
+    background-color: var(--bg-secondary);
+    padding: 1.5rem;
+    border-radius: 4px;
+    margin-top: 1rem;
+    min-height: 100px;  /* Ensure minimum height */
+    overflow-y: auto;   /* Add scrollbar if content is too long */
+    max-height: 300px;  /* Set maximum height before scrolling */
+}
+
+.comparison p {
+    margin-bottom: 1rem;
+    line-height: 1.5;
+    word-wrap: break-word;  /* Handle long words */
+}
+
+.comparison strong {
+    color: var(--accent);
+    display: block;  /* Put labels on their own line */
+    margin-bottom: 0.5rem;
+}
+
+.spoken-text, 
+.reference-text {
+    display: block;
+    padding: 0.5rem;
+    background-color: var(--bg-primary);
+    border-radius: 4px;
+    margin-top: 0.25rem;
+    white-space: pre-wrap;  /* Preserve line breaks and spaces */
+}
+
+.question-display {
+    background-color: var(--bg-secondary);
+    padding: 1.5rem;
+    border-radius: 4px;
+    margin-bottom: 2rem;
+}
+
+.question-display h4 {
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+}
+
+.time-limit {
+    color: var(--text-secondary);
+    margin-top: 0.5rem;
+}
+
+.timer {
+    color: var(--accent);
+    font-size: 1.2rem;
+    margin: 1rem 0;
+}
+
+.transcription {
+    background-color: var(--bg-secondary);
+    padding: 1rem;
+    border-radius: 4px;
+    margin-top: 1rem;
+}
+
+.spoken-text {
+    white-space: pre-wrap;
+    line-height: 1.5;
+    margin-top: 0.5rem;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+#speak-question-btn {
+    margin-left: 10px;
+    padding: 8px 15px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+#speak-question-btn:disabled {
+    background-color: #cccccc;
+    cursor: wait;
+}
+
+#speak-question-btn:hover:not(:disabled) {
+    background-color: #45a049;
+}

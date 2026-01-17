@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Admin Dashboard - Add Assessment Questions</h2>
+
+{% with messages = get_flashed_messages() %}
+    {% if messages %}
+        {% for message in messages %}
+            <div class="success-message">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<form method="POST" class="admin-form">
+    <div class="form-group">
+        <label for="type">Question Type:</label>
+        <select name="type" id="type" required>
+            <option value="writing">Writing Assessment</option>
+            <option value="listening">Listening Assessment</option>
+        </select>
+    </div>
+
+    <div id="writingFields">
+        <div class="form-group">
+            <label for="question">Question:</label>
+            <textarea name="question" id="question" rows="4" required></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="topic">Topic:</label>
+            <input type="text" name="topic" id="topic" required>
+        </div>
+    </div>
+
+    <div id="listeningFields" style="display: none;">
+        <div class="form-group">
+            <label for="text">Text to Speak:</label>
+            <textarea name="text" id="text" rows="4"></textarea>
+        </div>
+    </div>
+    
+    <div class="form-group">
+        <label for="difficulty">Difficulty Level:</label>
+        <select name="difficulty" id="difficulty" required>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+        </select>
+    </div>
+
+    <button type="submit">Add Question</button>
+</form>
+
+<script>
+document.getElementById('type').addEventListener('change', function() {
+    const writingFields = document.getElementById('writingFields');
+    const listeningFields = document.getElementById('listeningFields');
+    
+    if (this.value === 'writing') {
+        writingFields.style.display = 'block';
+        listeningFields.style.display = 'none';
+        document.getElementById('question').required = true;
+        document.getElementById('topic').required = true;
+        document.getElementById('text').required = false;
+    } else {
+        writingFields.style.display = 'none';
+        listeningFields.style.display = 'block';
+        document.getElementById('question').required = false;
+        document.getElementById('topic').required = false;
+        document.getElementById('text').required = true;
+    }
+});
+</script>
+{% endblock %}

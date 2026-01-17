@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard">
+    <h1>Welcome to AI Assessment Tool</h1>
+    <div class="assessment-cards">
+        <div class="card">
+            <h2>✍️ Writing</h2>
+            <p>Practice your writing skills with AI feedback</p>
+            <a href="{{ url_for('writing') }}" class="card-link">Start Writing</a>
+        </div>
+        <div class="card">
+            <h2>🎤 Speaking</h2>
+            <p>Improve your pronunciation with AI analysis</p>
+            <a href="{{ url_for('speaking') }}" class="card-link">Start Speaking</a>
+        </div>
+        <div class="card">
+            <h2>👂 Listening</h2>
+            <p>Enhance your listening comprehension</p>
+            <a href="{{ url_for('listening') }}" class="card-link">Start Listening</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

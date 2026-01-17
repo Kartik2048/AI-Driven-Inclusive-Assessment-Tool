@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>✍️ Writing Assessment</h2>
+
+{% if error %}
+<div class="error-message">
+    <p><strong>Error:</strong> {{ error.message }}</p>
+    {% if error.error %}
+    <p class="error-details">Details: {{ error.error }}</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('writing') }}">
+    <div class="question">
+        <h3>Question:</h3>
+        <p id="question-text">{{ current_question }}</p>
+        <button type="button" id="speak-question-btn" class="secondary-btn">
+            🔊 Speak Question
+        </button>
+        <p class="word-limit"><em>Please write your answer in 150-200 words.</em></p>
+        <input type="hidden" name="question" value="{{ current_question }}">
+        <button type="button" id="new-question-btn" class="secondary-btn">Get New Question</button>
+    </div>
+    
+    <div class="answer-section">
+        <label for="answer">Your Answer: <span id="word-count">0 words</span></label>
+        <textarea name="answer" id="answer" rows="10" required>{% if answer %}{{ answer }}{% endif %}</textarea>
+    </div>
+
+    <button type="submit">Submit Answer</button>
+</form>
+
+{% if result and not error %}
+<div class="result">
+    <h3>Evaluation Result:</h3>
+    <div class="grade">Grade: {{ result.grade }}</div>
+    <div class="score">Score: {{ result.score }}</div>
+    <div class="feedback">{{ result.feedback }}</div>
+    {% if result.model_answer %}
+    <div class="model-answer">
+        <h4>Model Answer:</h4>
+        <p>{{ result.model_answer }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<script>
+// Add word counter
+document.getElementById('answer').addEventListener('input', function() {
+    const wordCount = this.value.trim().split(/\s+/).filter(word => word.length > 0).length;
+    document.getElementById('word-count').textContent = wordCount + ' words';
+});
+
+document.getElementById('new-question-btn').addEventListener('click', function() {
+    fetch('/get-random-question')
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'error-message';
+                errorDiv.innerHTML = `<p><strong>Error:</strong> ${data.message}</p>`;
+                document.querySelector('form').prepend(errorDiv);
+            } else {
+                document.getElementById('question-text').textContent = data.question;
+                document.querySelector('input[name="question"]').value = data.question;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.innerHTML = '<p><strong>Error:</strong> Failed to fetch new question. Please try again.</p>';
+            document.querySelector('form').prepend(errorDiv);
+        });
+});
+
+// Add speech functionality
+document.getElementById('speak-question-btn').addEventListener('click', async function() {
+    const button = this;
+    const question = document.getElementById('question-text').textContent;
+    let audio = null;
+    
+    try {
+        // Disable button and show loading state
+        button.disabled = true;
+        button.innerHTML = '🔊 Loading...';
+        
+        // Request speech generation
+        const response = await fetch('/generate-speech', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text: question })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok || data.error) {
+            throw new Error(data.error || 'Failed to generate speech');
+        }
+        
+        // Create and play audio
+        audio = new Audio(data.audio_url);
+        
+        audio.onplay = function() {
+            button.innerHTML = '🔊 Playing...';
+        };
+        
+        audio.onended = function() {
+            button.disabled = false;
+            button.innerHTML = '🔊 Speak Question';
+        };
+        
+        audio.onerror = function(e) {
+            console.error('Audio playback error:', e);
+            button.disabled = false;
+            button.innerHTML = '🔊 Speak Question';
+            alert('Failed to play audio');
+        };
+        
+        await audio.play();
+        
+    } catch (error) {
+        console.error('Speech generation error:', error);
+        button.disabled = false;
+        button.innerHTML = '🔊 Speak Question';
+        alert(error.message || 'Failed to generate speech');
+    }
+});
+</script>
+{% endblock %}

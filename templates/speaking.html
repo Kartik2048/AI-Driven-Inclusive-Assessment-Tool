@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>🎤 Speaking Assessment</h2>
+
+<div class="speaking-section">
+    <div class="question-display">
+        <h3>Speak your answer to this question:</h3>
+        <p id="current-question">{{ current_question }}</p>
+        <p class="time-limit"><em>(Please speak for approximately 90 seconds)</em></p>
+    </div>
+
+    <div class="recording-controls">
+        <button id="startRecord" class="record-btn">🎙️ Start Recording</button>
+        <button id="stopRecord" class="record-btn" disabled>⏹️ Stop Recording</button>
+        <div id="timer" class="timer">Time: 0:00</div>
+        <div id="recordingStatus" class="recording-status"></div>
+    </div>
+
+    <div id="result" class="result" style="display: none;">
+        <h3>Evaluation Result:</h3>
+        <div class="grade"></div>
+        <div class="score"></div>
+        <div class="feedback"></div>
+        <div class="transcription">
+            <p><strong>Your Answer (Transcribed):</strong></p>
+            <p class="spoken-text"></p>
+        </div>
+    </div>
+
+    <button id="nextQuestion" class="next-btn" style="display: none;">Try Another Question</button>
+</div>
+
+<script>
+let mediaRecorder;
+let audioChunks = [];
+let stream;
+let timerInterval;
+let startTime;
+
+function updateTimer() {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    const minutes = Math.floor(elapsed / 60);
+    const seconds = elapsed % 60;
+    document.getElementById('timer').textContent = 
+        `Time: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
+    // Auto-stop after 90 seconds
+    if (elapsed >= 90) {
+        document.getElementById('stopRecord').click();
+    }
+}
+
+document.getElementById('startRecord').addEventListener('click', async () => {
+    audioChunks = [];
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        
+        mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
+        };
+        
+        mediaRecorder.start(100);
+        startTime = Date.now();
+        timerInterval = setInterval(updateTimer, 1000);
+        
+        document.getElementById('startRecord').disabled = true;
+        document.getElementById('stopRecord').disabled = false;
+        document.getElementById('recordingStatus').textContent = '🔴 Recording...';
+    } catch (err) {
+        console.error('Error accessing microphone:', err);
+        document.getElementById('recordingStatus').textContent = 'Error: Could not access microphone';
+    }
+});
+
+document.getElementById('stopRecord').addEventListener('click', async () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        try {
+            clearInterval(timerInterval);
+            mediaRecorder.stop();
+            document.getElementById('startRecord').disabled = false;
+            document.getElementById('stopRecord').disabled = true;
+            document.getElementById('recordingStatus').textContent = 'Processing...';
+
+            // Ensure all tracks are stopped
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const formData = new FormData();
+            formData.append('audio', audioBlob);
+            formData.append('question', document.getElementById('current-question').textContent);
+
+            const response = await fetch('/speaking', {
+                method: 'POST',
+                body: formData
+            });
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Server returned non-JSON response');
+            }
+
+            const result = await response.json();
+            if (result.error) {
+                throw new Error(result.message || 'Failed to process recording');
+            }
+
+            showResult(result);
+        } catch (error) {
+            console.error('Error processing recording:', error);
+            document.getElementById('recordingStatus').textContent = 
+                `Error: ${error.message || 'Failed to process recording'}`;
+            // Re-enable start button on error
+            document.getElementById('startRecord').disabled = false;
+        }
+    }
+});
+
+function showResult(result) {
+    if (!result || !result.transcript) {
+        document.getElementById('recordingStatus').textContent = 'Error: Invalid response from server';
+        return;
+    }
+
+    const resultDiv = document.getElementById('result');
+    resultDiv.style.display = 'block';
+    
+    resultDiv.innerHTML = `
+        <h3>Evaluation Result:</h3>
+        <div class="grade">Grade: ${result.grade || 'N/A'}</div>
+        <div class="score">Score: ${result.score || 'N/A'}</div>
+        <div class="feedback">${result.feedback || 'No feedback available'}</div>
+        <div class="transcription">
+            <p><strong>Your Answer (Transcribed):</strong></p>
+            <p class="spoken-text">${result.transcript}</p>
+        </div>
+    `;
+    
+    document.getElementById('recordingStatus').textContent = '';
+    document.getElementById('nextQuestion').style.display = 'block';
+}
+
+document.getElementById('nextQuestion').addEventListener('click', () => {
+    window.location.reload();
+});
+</script>
+{% endblock %}

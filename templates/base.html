@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Driven Assessment Tool</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <nav class="sidebar">
+        <div class="logo">
+            <h2>AI Assessment</h2>
+            <p>Inclusive Learning Tool</p>
+        </div>
+        <div class="nav-links">
+            <a href="{{ url_for('index') }}" {% if request.endpoint == 'index' %}class="active"{% endif %}>
+                🏠 Dashboard
+            </a>
+            <a href="{{ url_for('writing') }}" {% if request.endpoint == 'writing' %}class="active"{% endif %}>
+                ✍️ Writing Assessment
+            </a>
+            <a href="{{ url_for('speaking') }}" {% if request.endpoint == 'speaking' %}class="active"{% endif %}>
+                🎤 Speaking Assessment
+            </a>
+            <a href="{{ url_for('listening') }}" {% if request.endpoint == 'listening' %}class="active"{% endif %}>
+                👂 Listening Assessment
+            </a>
+        </div>
+        <div class="admin-section">
+            {% if session.get('is_admin') %}
+                <a href="{{ url_for('admin_dashboard') }}" class="admin-btn">📝 Add Questions</a>
+                <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+            {% else %}
+                <a href="{{ url_for('login') }}" class="login-btn">Teacher Login</a>
+            {% endif %}
+        </div>
+    </nav>
+    <main class="content">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>
