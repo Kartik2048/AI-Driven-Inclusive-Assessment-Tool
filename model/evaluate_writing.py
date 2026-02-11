@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Configure Gemini API
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', 'AIzaSyDJORqKs0BIE4xFJLhlj41260mBhfJx5NE')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '<ENTER YOUR GEMINI API KEY HERE>') #enter gemini api key
 genai.configure(api_key=GEMINI_API_KEY)
 
 def evaluate_written_answer(student_answer, question):
@@ -80,3 +80,4 @@ def evaluate_written_answer(student_answer, question):
             "model_answer": "Not available",
             "word_count": len(student_answer.split())
         }
+
