@@ -19,8 +19,8 @@ UPLOAD_FOLDER = "uploads/audio"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Admin credentials
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin123"
+ADMIN_USERNAME = "admin" #you may edit username 
+ADMIN_PASSWORD = "admin123" #you may edit password
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -340,3 +340,4 @@ def generate_speech_route():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
