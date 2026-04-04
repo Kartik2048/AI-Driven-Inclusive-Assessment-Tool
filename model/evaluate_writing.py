@@ -11,7 +11,12 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Configure Gemini API
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '<ENTER YOUR GEMINI API KEY HERE>') #enter gemini api key
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+
+if not GEMINI_API_KEY:
+    logger.error("GEMINI_API_KEY not found in environment variables. Please add it to .env file")
+    raise ValueError("Missing GEMINI_API_KEY. Please set it in your .env file")
+
 genai.configure(api_key=GEMINI_API_KEY)
 
 def evaluate_written_answer(student_answer, question):

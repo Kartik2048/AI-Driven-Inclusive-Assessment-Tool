@@ -1,8 +1,9 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
 from model.evaluate_writing import evaluate_written_answer
-from model.evaluate_listening import evaluate_speaking_similarity, generate_speech, transcribe_audio
-from model.whisper_asr import transcribe_audio
+from model.evaluate_listening import evaluate_speaking_similarity, generate_speech, transcribe_audio as transcribe_listening_audio
+from model.whisper_asr import transcribe_audio as transcribe_speaking_audio
 from config.mongodb import questions_collection
+from dotenv import load_dotenv
 import os
 from functools import wraps
 from flask import send_from_directory
@@ -13,14 +14,24 @@ import time
 from gtts import gTTS
 import hashlib
 
+# Load environment variables
+load_dotenv()
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'default-secret-key')
+
+# Set Flask secret key from environment variable
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    logging.warning("SECRET_KEY not found in environment variables. Using default (not recommended for production)")
+    SECRET_KEY = 'default-secret-key'
+
+app.config['SECRET_KEY'] = SECRET_KEY
 UPLOAD_FOLDER = "uploads/audio"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Admin credentials
-ADMIN_USERNAME = "admin" #you may edit username 
-ADMIN_PASSWORD = "admin123" #you may edit password
+# Admin credentials from environment variables
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -155,7 +166,7 @@ def speaking():
             logger.debug(f"Saved audio file to: {audio_path}")
             
             # Process the audio
-            spoken_text = transcribe_audio(audio_path)
+            spoken_text = transcribe_speaking_audio(audio_path)
             if not spoken_text:
                 raise ValueError("Failed to transcribe audio")
             
@@ -270,7 +281,7 @@ def listening():
             
             try:
                 # Transcribe and evaluate
-                spoken_text = transcribe_audio(audio_path)
+                spoken_text = transcribe_listening_audio(audio_path)
                 result = evaluate_speaking_similarity(reference_text, spoken_text)
                 
                 # Only delete file after successful processing
