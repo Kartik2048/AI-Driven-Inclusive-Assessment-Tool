@@ -1,5 +1,5 @@
 import os
-import google.generativeai as genai
+from google import genai
 from dotenv import load_dotenv
 import logging
 
@@ -17,12 +17,10 @@ if not GEMINI_API_KEY:
     logger.error("GEMINI_API_KEY not found in environment variables. Please add it to .env file")
     raise ValueError("Missing GEMINI_API_KEY. Please set it in your .env file")
 
-genai.configure(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 def evaluate_written_answer(student_answer, question):
     try:
-        model = genai.GenerativeModel('gemini-2.0-flash')
-
         # Update prompt to be more explicit about required format
         prompt = (
             f"You are an AI tutor evaluating a student's spoken or written answer. "
@@ -40,8 +38,13 @@ def evaluate_written_answer(student_answer, question):
             f"Model Answer: <model answer>"
         )
 
-        response = model.generate_content(prompt)
-        result = response.text.strip()
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+        )
+        result = (response.text or "").strip()
+        if not result:
+            raise ValueError("Empty response from Gemini model")
 
         # Parse the response more robustly
         lines = result.splitlines()

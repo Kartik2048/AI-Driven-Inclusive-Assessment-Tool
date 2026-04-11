@@ -1,11 +1,9 @@
 from sentence_transformers import SentenceTransformer, util
 from gtts import gTTS
-import os
-import whisper
-import tempfile
+from faster_whisper import WhisperModel
 
 model = SentenceTransformer('all-MiniLM-L6-v2')
-asr_model = whisper.load_model("base")
+asr_model = WhisperModel("base")
 
 def generate_speech(text, output_path):
     """Generate speech from text and save it"""
@@ -19,8 +17,8 @@ def generate_speech(text, output_path):
 
 def transcribe_audio(audio_path):
     """Convert speech to text using Whisper"""
-    result = asr_model.transcribe(audio_path)
-    return result["text"].strip()
+    segments, _ = asr_model.transcribe(audio_path)
+    return " ".join(seg.text for seg in segments).strip()
 
 def evaluate_speaking_similarity(ref_text, spoken_text):
     """Compare reference and spoken text similarity"""
