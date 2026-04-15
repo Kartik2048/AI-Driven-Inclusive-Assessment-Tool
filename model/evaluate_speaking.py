@@ -10,6 +10,10 @@ def azure_pronunciation_assessment(audio_path, subscription_key, region, referen
     try:
         if not subscription_key or not region:
             raise ValueError("AZURE_SPEECH_KEY and AZURE_SPEECH_REGION are required")
+        if not os.path.exists(audio_path):
+            raise ValueError(f"Audio file not found: {audio_path}")
+        if os.path.getsize(audio_path) == 0:
+            raise ValueError("Audio file is empty")
 
         speech_config = speechsdk.SpeechConfig(subscription=subscription_key, region=region)
         audio_config = speechsdk.audio.AudioConfig(filename=audio_path)
@@ -25,6 +29,20 @@ def azure_pronunciation_assessment(audio_path, subscription_key, region, referen
         )
         pronunciation_config.apply_to(recognizer)
         result = recognizer.recognize_once()
+
+        error_details = ""
+        comments = "Scores are based on Azure Speech Pronunciation Assessment."
+        if result.reason == speechsdk.ResultReason.Canceled:
+            cancellation = speechsdk.CancellationDetails(result)
+            error_details = (
+                f"Azure canceled recognition. reason={cancellation.reason}, "
+                f"code={cancellation.error_code}, details={cancellation.error_details}"
+            )
+            comments = error_details
+        elif result.reason == speechsdk.ResultReason.NoMatch:
+            error_details = "Azure could not recognize any speech from the audio."
+            comments = error_details
+
         recognized_text = result.text.strip() if getattr(result, "text", None) else ""
         pa_result = speechsdk.PronunciationAssessmentResult(result)
         return {
@@ -43,11 +61,11 @@ def azure_pronunciation_assessment(audio_path, subscription_key, region, referen
                 }
                 for w in pa_result.words
             ],
-            "Comments": "Scores are based on Azure Speech Pronunciation Assessment."
+            "Comments": comments,
+            "Error": error_details
         }
     except Exception as e:
         logger.error(f"Azure Pronunciation Assessment error: {str(e)}")
-        print(f"Azure Pronunciation Assessment error: {e}")
         return {
             "Transcript": "",
             "Accuracy": 0.0,
@@ -55,5 +73,6 @@ def azure_pronunciation_assessment(audio_path, subscription_key, region, referen
             "Pronunciation": 0.0,
             "Completeness": 0.0,
             "Words": [],
-            "Comments": "Azure assessment failed."
+            "Comments": "Azure assessment failed.",
+            "Error": str(e)
         }

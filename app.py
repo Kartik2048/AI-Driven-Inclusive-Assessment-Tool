@@ -193,6 +193,9 @@ def speaking():
             # --- Azure Pronunciation Assessment ---
             azure_key = os.environ.get("AZURE_SPEECH_KEY")
             azure_region = os.environ.get("AZURE_SPEECH_REGION")
+            if not azure_key or not azure_region:
+                raise ValueError("Azure Speech credentials are missing on this deployment")
+
             speaking_evaluation = azure_pronunciation_assessment(
                 converted_path, azure_key, azure_region
             )
@@ -201,7 +204,8 @@ def speaking():
 
             spoken_text = speaking_evaluation.get("Transcript", "")
             if not spoken_text:
-                raise ValueError("Failed to transcribe audio")
+                azure_error = speaking_evaluation.get("Error") or speaking_evaluation.get("Comments")
+                raise ValueError(f"Failed to transcribe audio. {azure_error}")
 
             from model.evaluate_writing import evaluate_written_answer
             content_evaluation = evaluate_written_answer(spoken_text, question)
@@ -300,28 +304,50 @@ def listening():
             return render_template("listening.html", error="Failed to load listening assessment")
     
     if request.method == "POST":
+        audio_path = None
+        converted_path = None
         try:
+            if 'audio' not in request.files:
+                return jsonify({"error": True, "message": "No audio file received"}), 400
+            if 'reference' not in request.form:
+                return jsonify({"error": True, "message": "No reference text received"}), 400
+
             audio_file = request.files['audio']
             reference_text = request.form['reference']
-            
-            # Create unique filename with timestamp
+            if not audio_file.filename:
+                return jsonify({"error": True, "message": "Empty audio file"}), 400
+
             timestamp = int(time.time())
-            filename = secure_filename(f"recording_{timestamp}.wav")
-            audio_path = os.path.join(UPLOAD_FOLDER, filename)
-            
-            # Save uploaded audio
+            source_ext = os.path.splitext(audio_file.filename)[1].lower()
+            if source_ext not in {".wav", ".webm", ".mp3", ".m4a", ".ogg", ".mp4"}:
+                source_ext = ".webm"
+
+            original_filename = secure_filename(f"listening_original_{timestamp}{source_ext}")
+            audio_path = os.path.join(UPLOAD_FOLDER, original_filename)
             audio_file.save(audio_path)
+
+            converted_filename = secure_filename(f"listening_recording_{timestamp}.wav")
+            converted_path = os.path.join(UPLOAD_FOLDER, converted_filename)
+            if not convert_to_wav(audio_path, converted_path):
+                raise ValueError("Failed to convert listening audio to WAV format")
             
             try:
                 azure_key = os.environ.get("AZURE_SPEECH_KEY")
                 azure_region = os.environ.get("AZURE_SPEECH_REGION")
+                if not azure_key or not azure_region:
+                    raise ValueError("Azure Speech credentials are missing on this deployment")
+
                 listening_evaluation = azure_pronunciation_assessment(
-                    audio_path,
+                    converted_path,
                     azure_key,
                     azure_region,
                     reference_text
                 )
                 spoken_text = listening_evaluation.get("Transcript", "")
+                if not spoken_text:
+                    azure_error = listening_evaluation.get("Error") or listening_evaluation.get("Comments")
+                    raise ValueError(f"Azure could not transcribe the audio. {azure_error}")
+
                 result = evaluate_speaking_similarity(reference_text, spoken_text)
                 result["azure_metrics"] = {
                     "Accuracy": listening_evaluation.get("Accuracy", 0.0),
@@ -329,9 +355,12 @@ def listening():
                     "Pronunciation": listening_evaluation.get("Pronunciation", 0.0),
                     "Completeness": listening_evaluation.get("Completeness", 0.0)
                 }
+                result["azure_comments"] = listening_evaluation.get("Comments", "")
                 
                 # Only delete file after successful processing
-                os.remove(audio_path)
+                for path in [audio_path, converted_path]:
+                    if path and os.path.exists(path):
+                        os.remove(path)
                 
                 return jsonify(result)
                 
@@ -339,13 +368,18 @@ def listening():
                 # Log the error for debugging
                 logger.error(f"Processing error: {str(e)}")
                 # Clean up file in case of error
-                if os.path.exists(audio_path):
-                    os.remove(audio_path)
+                for path in [audio_path, converted_path]:
+                    if path and os.path.exists(path):
+                        os.remove(path)
                 raise
                 
         except Exception as e:
             logger.error(f"Error in listening POST: {str(e)}")
-            return jsonify(handle_model_error(e)), 500
+            return jsonify({
+                "error": True,
+                "message": str(e),
+                "details": "Failed to process listening recording"
+            }), 500
 
 @app.route("/get-random-question")
 def get_random_question():

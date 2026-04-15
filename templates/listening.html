@@ -38,10 +38,11 @@
 </div>
 
 <script>
-let mediaRecorder;
-let audioChunks = [];
+let audioContext;
+let mediaStreamSource;
+let processor;
+let audioBufferChunks = [];
 let stream;
-let isRecording = false;
 
 async function loadReferenceAudio() {
     const referenceTextElement = document.getElementById('reference-sentence');
@@ -97,19 +98,22 @@ function speakReferenceWithBrowser(text) {
 }
 
 document.getElementById('startRecord').addEventListener('click', async () => {
-    audioChunks = [];
+    audioBufferChunks = [];
     try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
-        
-        mediaRecorder.ondataavailable = (event) => {
-            audioChunks.push(event.data);
+
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        mediaStreamSource = audioContext.createMediaStreamSource(stream);
+        processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+        processor.onaudioprocess = (event) => {
+            const inputData = event.inputBuffer.getChannelData(0);
+            audioBufferChunks.push(new Float32Array(inputData));
         };
-        
-        mediaRecorder.start(100); // Start recording with 100ms time slices
-        mediaRecorder.requestData(); // Request data immediately
-        
-        isRecording = true;
+
+        mediaStreamSource.connect(processor);
+        processor.connect(audioContext.destination);
+
         document.getElementById('startRecord').disabled = true;
         document.getElementById('stopRecord').disabled = false;
         document.getElementById('recordingStatus').textContent = '🔴 Recording...';
@@ -120,13 +124,19 @@ document.getElementById('startRecord').addEventListener('click', async () => {
 });
 
 document.getElementById('stopRecord').addEventListener('click', async () => {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
+    if (stream) {
         try {
-            mediaRecorder.stop();
+            if (processor) {
+                processor.disconnect();
+            }
+            if (mediaStreamSource) {
+                mediaStreamSource.disconnect();
+            }
+            const sampleRate = audioContext ? audioContext.sampleRate : 48000;
+
             document.getElementById('startRecord').disabled = false;
             document.getElementById('stopRecord').disabled = true;
             document.getElementById('recordingStatus').textContent = 'Processing...';
-            isRecording = false;
 
             // Get reference text from the correct element
             const referenceText = document.getElementById('reference-sentence');
@@ -139,10 +149,14 @@ document.getElementById('stopRecord').addEventListener('click', async () => {
                 stream.getTracks().forEach(track => track.stop());
             }
 
+            if (audioContext) {
+                await audioContext.close();
+            }
+
             // Create blob and send data
-            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const audioBlob = encodeWavFromFloat32(audioBufferChunks, sampleRate, 16000);
             const formData = new FormData();
-            formData.append('audio', audioBlob);
+            formData.append('audio', audioBlob, `listening_${Date.now()}.wav`);
             formData.append('reference', referenceText.textContent);
 
             // Send to server with error handling
@@ -170,6 +184,93 @@ document.getElementById('stopRecord').addEventListener('click', async () => {
         }
     }
 });
+
+function encodeWavFromFloat32(chunks, originalSampleRate, targetSampleRate) {
+    const merged = mergeFloat32Chunks(chunks);
+    const pcmData = downsampleBuffer(merged, originalSampleRate, targetSampleRate);
+    const wavBuffer = buildWavBuffer(pcmData, targetSampleRate);
+    return new Blob([wavBuffer], { type: 'audio/wav' });
+}
+
+function mergeFloat32Chunks(chunks) {
+    let totalLength = 0;
+    for (const chunk of chunks) {
+        totalLength += chunk.length;
+    }
+
+    const result = new Float32Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+        result.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return result;
+}
+
+function downsampleBuffer(buffer, inputRate, outputRate) {
+    if (outputRate >= inputRate) {
+        return buffer;
+    }
+
+    const sampleRateRatio = inputRate / outputRate;
+    const newLength = Math.round(buffer.length / sampleRateRatio);
+    const result = new Float32Array(newLength);
+
+    let offsetResult = 0;
+    let offsetBuffer = 0;
+    while (offsetResult < result.length) {
+        const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+        let accum = 0;
+        let count = 0;
+
+        for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+            accum += buffer[i];
+            count++;
+        }
+
+        result[offsetResult] = count > 0 ? accum / count : 0;
+        offsetResult++;
+        offsetBuffer = nextOffsetBuffer;
+    }
+
+    return result;
+}
+
+function buildWavBuffer(float32Data, sampleRate) {
+    const bytesPerSample = 2;
+    const blockAlign = bytesPerSample;
+    const dataSize = float32Data.length * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    writeAsciiString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeAsciiString(view, 8, 'WAVE');
+    writeAsciiString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true);
+    writeAsciiString(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    let offset = 44;
+    for (let i = 0; i < float32Data.length; i++, offset += 2) {
+        const sample = Math.max(-1, Math.min(1, float32Data[i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+    }
+
+    return buffer;
+}
+
+function writeAsciiString(view, offset, value) {
+    for (let i = 0; i < value.length; i++) {
+        view.setUint8(offset + i, value.charCodeAt(i));
+    }
+}
 
 // Clean up resources on page unload
 window.addEventListener('beforeunload', () => {
