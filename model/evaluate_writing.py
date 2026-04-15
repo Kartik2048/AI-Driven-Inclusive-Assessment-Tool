@@ -5,21 +5,32 @@ import logging
 import time
 import random
 import hashlib
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from project root and override stale shell values.
+ROOT_DIR = Path(__file__).resolve().parents[1]
+load_dotenv(dotenv_path=ROOT_DIR / ".env", override=True)
 
-# Configure Gemini API
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+
+def _normalize_api_key(raw_value):
+    if not raw_value:
+        return ""
+    return raw_value.strip().strip('"').strip("'")
+
+
+# Configure Gemini API (support either variable name).
+GEMINI_API_KEY = _normalize_api_key(
+    os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+)
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 else:
-    logger.warning("GEMINI_API_KEY is not set. Writing evaluation will fail until it is configured.")
+    logger.warning("Gemini API key is not set. Writing evaluation will fail until it is configured.")
 
 # Avoid repeated Gemini requests for identical inputs in the same process.
 _EVALUATION_CACHE = {}
@@ -32,6 +43,17 @@ def _is_rate_limited_error(error):
         or "too many requests" in error_text
         or "resource exhausted" in error_text
         or "quota" in error_text
+    )
+
+
+def _is_invalid_api_key_error(error):
+    error_text = str(error).lower()
+    return (
+        "api key not found" in error_text
+        or "api_key_invalid" in error_text
+        or "api key invalid" in error_text
+        or "invalid api key" in error_text
+        or "permission denied" in error_text
     )
 
 
@@ -72,7 +94,7 @@ def _parse_evaluation_result(result, student_answer):
 def evaluate_written_answer(student_answer, question):
     try:
         if not GEMINI_API_KEY:
-            raise ValueError("GEMINI_API_KEY is not configured")
+            raise ValueError("Gemini API key is not configured")
 
         cache_key = hashlib.sha256(f"{question}||{student_answer}".encode("utf-8")).hexdigest()
         if cache_key in _EVALUATION_CACHE:
@@ -125,6 +147,11 @@ def evaluate_written_answer(student_answer, question):
             feedback_message = (
                 "Gemini API rate limit reached (429 Too Many Requests). "
                 "Please wait a minute and try again, or use a key/project with higher quota."
+            )
+        elif _is_invalid_api_key_error(e):
+            feedback_message = (
+                "Gemini API key is invalid or unavailable for this project. "
+                "Update GEMINI_API_KEY in .env with a valid AI Studio key and restart the app."
             )
         else:
             feedback_message = "Unable to evaluate the answer. Please try again."
