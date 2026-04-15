@@ -15,9 +15,15 @@ import time
 import hashlib
 import subprocess
 import tempfile
+import shutil
 
 def convert_to_wav(input_path, output_path):
     try:
+        # If the input is already WAV, reuse it directly.
+        if os.path.splitext(input_path)[1].lower() == ".wav":
+            shutil.copyfile(input_path, output_path)
+            return True
+
         # Use ffmpeg to convert any audio format to wav (mono, 16kHz)
         command = [
             "ffmpeg", "-y", "-i", input_path,
@@ -25,8 +31,15 @@ def convert_to_wav(input_path, output_path):
         ]
         subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return True
+    except FileNotFoundError:
+        logger.error("ffmpeg is not installed or not available in PATH")
+        return False
+    except subprocess.CalledProcessError as e:
+        stderr_text = e.stderr.decode("utf-8", errors="ignore") if e.stderr else str(e)
+        logger.error(f"ffmpeg conversion failed: {stderr_text}")
+        return False
     except Exception as e:
-        print(f"ffmpeg conversion error: {e}")
+        logger.error(f"Audio conversion error: {e}")
         return False
 
 app = Flask(__name__)
@@ -163,7 +176,11 @@ def speaking():
                 return jsonify({"error": True, "message": "Empty audio file"}), 400
 
             timestamp = int(time.time())
-            original_filename = secure_filename(f"original_{timestamp}.webm")
+            source_ext = os.path.splitext(audio_file.filename)[1].lower()
+            if source_ext not in {".wav", ".webm", ".mp3", ".m4a", ".ogg", ".mp4"}:
+                source_ext = ".webm"
+
+            original_filename = secure_filename(f"original_{timestamp}{source_ext}")
             audio_path = os.path.join(UPLOAD_FOLDER, original_filename)
             os.makedirs(os.path.dirname(audio_path), exist_ok=True)
             audio_file.save(audio_path)
@@ -341,9 +358,14 @@ def get_random_question():
 @app.route("/generate-speech", methods=["POST"])
 def generate_speech_route():
     try:
-        text = request.json.get('text')
+        payload = request.get_json(silent=True) or {}
+        text = (payload.get('text') or '').strip()
         if not text:
             return jsonify({"error": "No text provided"}), 400
+
+        # Keep TTS input bounded to avoid provider-side failures on long payloads.
+        if len(text) > 500:
+            text = text[:500]
 
         # Generate unique filename based on text content
         filename = f"speech_{hashlib.md5(text.encode()).hexdigest()[:10]}.mp3"
@@ -352,8 +374,11 @@ def generate_speech_route():
         try:
             # Generate audio file if it doesn't exist
             if not os.path.exists(audio_path):
-                tts = gTTS(text=text, lang='en', slow=False)
-                tts.save(audio_path)
+                if not generate_speech(text, audio_path):
+                    raise RuntimeError("TTS provider failed to create audio")
+
+            if not os.path.exists(audio_path) or os.path.getsize(audio_path) == 0:
+                raise RuntimeError("Generated audio file is missing or empty")
 
             return jsonify({
                 "success": True,
@@ -364,7 +389,7 @@ def generate_speech_route():
             logger.error(f"gTTS error: {str(e)}")
             return jsonify({
                 "error": "Text-to-speech generation failed",
-                "details": str(e)
+                "details": "Unable to generate audio right now. Please retry in a few seconds."
             }), 500
 
     except Exception as e:

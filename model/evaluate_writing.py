@@ -2,6 +2,9 @@ import os
 import google.generativeai as genai
 from dotenv import load_dotenv
 import logging
+import time
+import random
+import hashlib
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -18,12 +21,64 @@ if GEMINI_API_KEY:
 else:
     logger.warning("GEMINI_API_KEY is not set. Writing evaluation will fail until it is configured.")
 
+# Avoid repeated Gemini requests for identical inputs in the same process.
+_EVALUATION_CACHE = {}
+
+
+def _is_rate_limited_error(error):
+    error_text = str(error).lower()
+    return (
+        "429" in error_text
+        or "too many requests" in error_text
+        or "resource exhausted" in error_text
+        or "quota" in error_text
+    )
+
+
+def _parse_evaluation_result(result, student_answer):
+    # Parse the response more robustly
+    lines = result.splitlines()
+
+    # Extract score and grade
+    score_line = next((line for line in lines if "Score:" in line), "Score: N/A")
+    grade_line = next((line for line in lines if "Grade:" in line), "Grade: N/A")
+
+    # Find section indices
+    grade_index = lines.index(grade_line) if grade_line in lines else -1
+    model_answer_index = next((i for i, line in enumerate(lines) if "Model Answer:" in line), -1)
+
+    # Extract feedback and model answer with fallbacks
+    if grade_index != -1 and model_answer_index != -1:
+        feedback = "\n".join(lines[grade_index + 1:model_answer_index]).strip()
+        model_answer = "\n".join(lines[model_answer_index + 1:]).strip()
+    elif grade_index != -1:
+        feedback = "\n".join(lines[grade_index + 1:]).strip()
+        model_answer = "Model answer not available"
+    else:
+        feedback = "Feedback not available"
+        model_answer = "Model answer not available"
+
+    # Remove section headers from feedback
+    feedback = feedback.replace("Feedback:", "").strip()
+
+    return {
+        "score": score_line.replace("Score:", "").strip(),
+        "grade": grade_line.replace("Grade:", "").strip(),
+        "feedback": feedback,
+        "model_answer": model_answer,
+        "word_count": len(student_answer.split())
+    }
+
 def evaluate_written_answer(student_answer, question):
     try:
         if not GEMINI_API_KEY:
             raise ValueError("GEMINI_API_KEY is not configured")
 
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        cache_key = hashlib.sha256(f"{question}||{student_answer}".encode("utf-8")).hexdigest()
+        if cache_key in _EVALUATION_CACHE:
+            return _EVALUATION_CACHE[cache_key]
+
+        model = genai.GenerativeModel('gemini-2.5-flash')
 
         # Update prompt to be more explicit about required format
         prompt = (
@@ -42,48 +97,42 @@ def evaluate_written_answer(student_answer, question):
             f"Model Answer: <model answer>"
         )
 
-        response = model.generate_content(prompt)
-        result = response.text.strip()
+        last_error = None
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                response = model.generate_content(prompt)
+                result_text = (response.text or "").strip()
+                parsed_result = _parse_evaluation_result(result_text, student_answer)
+                _EVALUATION_CACHE[cache_key] = parsed_result
+                return parsed_result
+            except Exception as e:
+                last_error = e
+                if not _is_rate_limited_error(e):
+                    raise
 
-        # Parse the response more robustly
-        lines = result.splitlines()
-        
-        # Extract score and grade
-        score_line = next((line for line in lines if "Score:" in line), "Score: N/A")
-        grade_line = next((line for line in lines if "Grade:" in line), "Grade: N/A")
+                if attempt < max_attempts - 1:
+                    # Exponential backoff with small jitter for transient 429s.
+                    backoff_seconds = (2 ** attempt) + random.uniform(0.1, 0.5)
+                    logger.warning(f"Gemini rate-limited, retrying in {backoff_seconds:.2f}s")
+                    time.sleep(backoff_seconds)
 
-        # Find section indices
-        grade_index = lines.index(grade_line) if grade_line in lines else -1
-        model_answer_index = next((i for i, line in enumerate(lines) if "Model Answer:" in line), -1)
-
-        # Extract feedback and model answer with fallbacks
-        if grade_index != -1 and model_answer_index != -1:
-            feedback = "\n".join(lines[grade_index + 1:model_answer_index]).strip()
-            model_answer = "\n".join(lines[model_answer_index + 1:]).strip()
-        elif grade_index != -1:
-            feedback = "\n".join(lines[grade_index + 1:]).strip()
-            model_answer = "Model answer not available"
-        else:
-            feedback = "Feedback not available"
-            model_answer = "Model answer not available"
-
-        # Remove section headers from feedback
-        feedback = feedback.replace("Feedback:", "").strip()
-
-        return {
-            "score": score_line.replace("Score:", "").strip(),
-            "grade": grade_line.replace("Grade:", "").strip(),
-            "feedback": feedback,
-            "model_answer": model_answer,
-            "word_count": len(student_answer.split())
-        }
+        raise last_error
 
     except Exception as e:
         logger.error(f"Evaluation error: {str(e)}")
+        if _is_rate_limited_error(e):
+            feedback_message = (
+                "Gemini API rate limit reached (429 Too Many Requests). "
+                "Please wait a minute and try again, or use a key/project with higher quota."
+            )
+        else:
+            feedback_message = "Unable to evaluate the answer. Please try again."
+
         return {
             "score": "N/A",
             "grade": "N/A",
-            "feedback": "Unable to evaluate the answer. Please try again.",
+            "feedback": feedback_message,
             "model_answer": "Not available",
             "word_count": len(student_answer.split())
         }

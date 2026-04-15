@@ -13,6 +13,7 @@
                 <source id="reference-audio-source" src="" type="audio/mpeg">
                 Your browser does not support the audio element.
             </audio>
+            <button id="fallbackSpeakBtn" class="next-btn" style="display: none;">Play Reference (Browser Voice)</button>
         </div>
     </div>
 
@@ -46,6 +47,7 @@ async function loadReferenceAudio() {
     const referenceTextElement = document.getElementById('reference-sentence');
     const referenceAudio = document.getElementById('reference-audio');
     const sourceElement = document.getElementById('reference-audio-source');
+    const fallbackSpeakBtn = document.getElementById('fallbackSpeakBtn');
 
     if (!referenceTextElement || !sourceElement || !referenceAudio) {
         return;
@@ -65,11 +67,33 @@ async function loadReferenceAudio() {
 
         sourceElement.src = result.audio_url;
         referenceAudio.load();
+        if (fallbackSpeakBtn) {
+            fallbackSpeakBtn.style.display = 'none';
+        }
     } catch (error) {
         console.error('Error loading reference audio:', error);
-        document.getElementById('recordingStatus').textContent =
-            `Audio load error: ${error.message || 'Failed to prepare reference audio'}`;
+        const fallbackWorked = speakReferenceWithBrowser(referenceTextElement.textContent.trim());
+        if (fallbackSpeakBtn) {
+            fallbackSpeakBtn.style.display = fallbackWorked ? 'inline-block' : 'none';
+        }
+
+        document.getElementById('recordingStatus').textContent = fallbackWorked
+            ? 'Server TTS unavailable. Using browser voice for reference audio.'
+            : `Audio load error: ${error.message || 'Failed to prepare reference audio'}`;
     }
+}
+
+function speakReferenceWithBrowser(text) {
+    if (!('speechSynthesis' in window) || !text) {
+        return false;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 0.95;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+    return true;
 }
 
 document.getElementById('startRecord').addEventListener('click', async () => {
@@ -175,6 +199,11 @@ function showResult(result) {
 
 document.getElementById('nextQuestion').addEventListener('click', () => {
     window.location.reload();
+});
+
+document.getElementById('fallbackSpeakBtn').addEventListener('click', () => {
+    const referenceText = document.getElementById('reference-sentence').textContent.trim();
+    speakReferenceWithBrowser(referenceText);
 });
 
 loadReferenceAudio();

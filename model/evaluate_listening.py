@@ -1,14 +1,18 @@
 from difflib import SequenceMatcher
 from gtts import gTTS
+import logging
+import os
+
+logger = logging.getLogger(__name__)
 
 def generate_speech(text, output_path):
     """Generate speech from text and save it"""
     try:
         tts = gTTS(text=text, lang='en')
         tts.save(output_path)
-        return True
+        return os.path.exists(output_path) and os.path.getsize(output_path) > 0
     except Exception as e:
-        print(f"Error generating speech: {str(e)}")
+        logger.error(f"Error generating speech: {str(e)}")
         return False
 
 def evaluate_speaking_similarity(ref_text, spoken_text):
