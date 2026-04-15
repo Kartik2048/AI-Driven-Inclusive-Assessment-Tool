@@ -3,7 +3,7 @@ load_dotenv()
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session, send_from_directory
 from model.evaluate_writing import evaluate_written_answer
-from model.evaluate_speaking import azure_pronunciation_assessment
+from model.evaluate_speaking import azure_pronunciation_assessment, azure_transcribe_audio
 from model.evaluate_listening import evaluate_speaking_similarity, generate_speech
 from config.mongodb import questions_collection
 import os
@@ -337,16 +337,24 @@ def listening():
                 if not azure_key or not azure_region:
                     raise ValueError("Azure Speech credentials are missing on this deployment")
 
+                # Use unbiased transcription for similarity scoring.
+                transcription_result = azure_transcribe_audio(
+                    converted_path,
+                    azure_key,
+                    azure_region
+                )
+                spoken_text = transcription_result.get("Transcript", "")
+                if not spoken_text:
+                    transcription_error = transcription_result.get("Error") or "No speech recognized"
+                    raise ValueError(f"Azure could not transcribe the audio. {transcription_error}")
+
+                # Keep pronunciation metrics as supplemental feedback.
                 listening_evaluation = azure_pronunciation_assessment(
                     converted_path,
                     azure_key,
                     azure_region,
                     reference_text
                 )
-                spoken_text = listening_evaluation.get("Transcript", "")
-                if not spoken_text:
-                    azure_error = listening_evaluation.get("Error") or listening_evaluation.get("Comments")
-                    raise ValueError(f"Azure could not transcribe the audio. {azure_error}")
 
                 result = evaluate_speaking_similarity(reference_text, spoken_text)
                 result["azure_metrics"] = {
@@ -356,6 +364,7 @@ def listening():
                     "Completeness": listening_evaluation.get("Completeness", 0.0)
                 }
                 result["azure_comments"] = listening_evaluation.get("Comments", "")
+                result["transcript_source"] = "azure_speech_to_text"
                 
                 # Only delete file after successful processing
                 for path in [audio_path, converted_path]:
