@@ -1,5 +1,5 @@
 import os
-from google import genai
+import google.generativeai as genai
 from dotenv import load_dotenv
 import logging
 
@@ -10,28 +10,20 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-client = None
+# Configure Gemini API
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
-
-def get_client():
-    global client
-
-    if client is not None:
-        return client
-
-    gemini_api_key = os.getenv('GEMINI_API_KEY')
-    if not gemini_api_key:
-        logger.warning("GEMINI_API_KEY not found in environment variables.")
-        return None
-
-    client = genai.Client(api_key=gemini_api_key)
-    return client
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+else:
+    logger.warning("GEMINI_API_KEY is not set. Writing evaluation will fail until it is configured.")
 
 def evaluate_written_answer(student_answer, question):
     try:
-        llm_client = get_client()
-        if llm_client is None:
+        if not GEMINI_API_KEY:
             raise ValueError("GEMINI_API_KEY is not configured")
+
+        model = genai.GenerativeModel('gemini-2.0-flash')
 
         # Update prompt to be more explicit about required format
         prompt = (
@@ -50,13 +42,8 @@ def evaluate_written_answer(student_answer, question):
             f"Model Answer: <model answer>"
         )
 
-        response = llm_client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
-        result = (response.text or "").strip()
-        if not result:
-            raise ValueError("Empty response from Gemini model")
+        response = model.generate_content(prompt)
+        result = response.text.strip()
 
         # Parse the response more robustly
         lines = result.splitlines()
@@ -100,4 +87,3 @@ def evaluate_written_answer(student_answer, question):
             "model_answer": "Not available",
             "word_count": len(student_answer.split())
         }
-

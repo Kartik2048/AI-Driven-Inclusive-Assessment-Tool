@@ -18,9 +18,19 @@
 
     <div id="result" class="result" style="display: none;">
         <h3>Evaluation Result:</h3>
-        <div class="grade"></div>
-        <div class="score"></div>
-        <div class="feedback"></div>
+        <div class="speaking-metrics">
+            <h4>Speaking Quality:</h4>
+            <div class="metric">Fluency and Coherence: <span class="fluency-score"></span></div>
+            <div class="metric">Pronunciation: <span class="pronunciation-score"></span></div>
+            <div class="metric">Overall Band: <span class="overall-band"></span></div>
+            <div class="metric">Comments: <span class="speaking-comments"></span></div>
+        </div>
+        <div class="content-evaluation">
+            <h4>Content Assessment:</h4>
+            <div class="grade"></div>
+            <div class="score"></div>
+            <div class="feedback"></div>
+        </div>
         <div class="transcription">
             <p><strong>Your Answer (Transcribed):</strong></p>
             <p class="spoken-text"></p>
@@ -119,26 +129,32 @@ document.getElementById('stopRecord').addEventListener('click', async () => {
 });
 
 function showResult(result) {
-    if (!result || !result.transcript) {
-        document.getElementById('recordingStatus').textContent = 'Error: Invalid response from server';
+    if (!result) {
+        document.getElementById('recordingStatus').textContent = 'Error: No evaluation results received';
         return;
     }
 
     const resultDiv = document.getElementById('result');
     resultDiv.style.display = 'block';
     
-    resultDiv.innerHTML = `
-        <h3>Evaluation Result:</h3>
-        <div class="grade">Grade: ${result.grade || 'N/A'}</div>
-        <div class="score">Score: ${result.score || 'N/A'}</div>
-        <div class="feedback">${result.feedback || 'No feedback available'}</div>
-        <div class="transcription">
-            <p><strong>Your Answer (Transcribed):</strong></p>
-            <p class="spoken-text">${result.transcript}</p>
-        </div>
-    `;
+    // Update speaking metrics
+    if (result.speaking_metrics) {
+        resultDiv.querySelector('.fluency-score').textContent = result.speaking_metrics['Fluency and Coherence'];
+        resultDiv.querySelector('.pronunciation-score').textContent = result.speaking_metrics['Pronunciation'];
+        resultDiv.querySelector('.overall-band').textContent = result.speaking_metrics['Overall Band'];
+        resultDiv.querySelector('.speaking-comments').textContent = result.speaking_metrics['Comments'];
+    }
     
-    document.getElementById('recordingStatus').textContent = '';
+    // Update content evaluation
+    if (result.content_evaluation) {
+        resultDiv.querySelector('.grade').textContent = `Grade: ${result.content_evaluation.grade}`;
+        resultDiv.querySelector('.score').textContent = `Score: ${result.content_evaluation.score}`;
+        resultDiv.querySelector('.feedback').textContent = result.content_evaluation.feedback;
+    }
+    
+    resultDiv.querySelector('.spoken-text').textContent = result.transcript;
+    
+    document.getElementById('recordingStatus').textContent = 'Evaluation Complete';
     document.getElementById('nextQuestion').style.display = 'block';
 }
 

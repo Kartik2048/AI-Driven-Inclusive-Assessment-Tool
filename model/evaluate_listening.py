@@ -1,27 +1,5 @@
-from sentence_transformers import SentenceTransformer, util
+from difflib import SequenceMatcher
 from gtts import gTTS
-from faster_whisper import WhisperModel
-
-model = None
-asr_model = None
-
-
-def get_similarity_model():
-    global model
-
-    if model is None:
-        model = SentenceTransformer('all-MiniLM-L6-v2')
-
-    return model
-
-
-def get_asr_model():
-    global asr_model
-
-    if asr_model is None:
-        asr_model = WhisperModel("base")
-
-    return asr_model
 
 def generate_speech(text, output_path):
     """Generate speech from text and save it"""
@@ -33,17 +11,9 @@ def generate_speech(text, output_path):
         print(f"Error generating speech: {str(e)}")
         return False
 
-def transcribe_audio(audio_path):
-    """Convert speech to text using Whisper"""
-    segments, _ = get_asr_model().transcribe(audio_path)
-    return " ".join(seg.text for seg in segments).strip()
-
 def evaluate_speaking_similarity(ref_text, spoken_text):
     """Compare reference and spoken text similarity"""
-    similarity_model = get_similarity_model()
-    ref_emb = similarity_model.encode(ref_text, convert_to_tensor=True)
-    spoken_emb = similarity_model.encode(spoken_text, convert_to_tensor=True)
-    similarity = util.cos_sim(ref_emb, spoken_emb).item()
+    similarity = SequenceMatcher(None, ref_text.lower().strip(), spoken_text.lower().strip()).ratio()
     
     # Convert similarity to percentage and grade
     score = round(similarity * 100, 2)

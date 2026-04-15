@@ -1,4 +1,5 @@
 from pymongo import MongoClient
+from urllib.parse import quote_plus
 from dotenv import load_dotenv
 import os
 import logging
@@ -7,28 +8,23 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Get MongoDB URI from environment variable
-MONGO_URI = os.getenv('MONGO_URI')
+mongo_uri = os.getenv("MONGO_URI") or os.getenv("MONGODB_URI")
+db_name = os.getenv("MONGO_DB_NAME") or os.getenv("MONGODB_DB_NAME") or "assessment_db"
 
-if not MONGO_URI:
-    logger.warning("MONGO_URI not found in environment variables. Please add it to .env file")
-    # Fallback for development (should be removed in production)
-    MONGO_URI = 'mongodb://localhost:27017/'
+client = None
 
-try:
-    client = MongoClient(MONGO_URI)
-    # Verify connection
-    client.admin.command('ping')
-    logger.info("Connected to MongoDB successfully")
-except Exception as e:
-    logger.error(f"Failed to connect to MongoDB: {str(e)}")
-    client = None
+if mongo_uri:
+	try:
+		client = MongoClient(mongo_uri)
+		client.admin.command("ping")
+	except Exception as exc:
+		logger.error(f"Failed to connect to MongoDB: {exc}")
+		client = None
 
 if client:
-    db = client["assessment_db"]
-    questions_collection = db["writing_questions"]
-    users_collection = db["users"]
+	db = client[db_name]
+	questions_collection = db["writing_questions"]
+	users_collection = db["users"]
 else:
-    questions_collection = None
-    users_collection = None
-
+	questions_collection = None
+	users_collection = None

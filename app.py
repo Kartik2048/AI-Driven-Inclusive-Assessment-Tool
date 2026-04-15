@@ -1,35 +1,39 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
 from model.evaluate_writing import evaluate_written_answer
-from model.evaluate_listening import evaluate_speaking_similarity, generate_speech, transcribe_audio as transcribe_listening_audio
-from model.whisper_asr import transcribe_audio as transcribe_speaking_audio
+from model.evaluate_speaking import azure_pronunciation_assessment
+from model.evaluate_listening import evaluate_speaking_similarity, generate_speech
 from config.mongodb import questions_collection
-from dotenv import load_dotenv
 import os
 from functools import wraps
-from flask import send_from_directory
 from werkzeug.utils import secure_filename
 import random
 import logging
 import time
-from gtts import gTTS
 import hashlib
+import subprocess
 
-# Load environment variables
-load_dotenv()
+def convert_to_wav(input_path, output_path):
+    try:
+        # Use ffmpeg to convert any audio format to wav (mono, 16kHz)
+        command = [
+            "ffmpeg", "-y", "-i", input_path,
+            "-ac", "1", "-ar", "16000", output_path
+        ]
+        subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return True
+    except Exception as e:
+        print(f"ffmpeg conversion error: {e}")
+        return False
 
 app = Flask(__name__)
-
-# Set Flask secret key from environment variable
-SECRET_KEY = os.getenv('SECRET_KEY')
-if not SECRET_KEY:
-    logging.warning("SECRET_KEY not found in environment variables. Using default (not recommended for production)")
-    SECRET_KEY = 'default-secret-key'
-
-app.config['SECRET_KEY'] = SECRET_KEY
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'default-secret-key')
 UPLOAD_FOLDER = "uploads/audio"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Admin credentials from environment variables
+# Admin credentials
 ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
 ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')
 
@@ -143,77 +147,99 @@ def writing():
 def speaking():
     if request.method == "POST":
         audio_path = None
+        converted_path = None
         try:
-            # Validate request data
             if 'audio' not in request.files:
-                raise ValueError("No audio file received")
+                return jsonify({"error": True, "message": "No audio file received"}), 400
             if 'question' not in request.form:
-                raise ValueError("No question received")
-                
+                return jsonify({"error": True, "message": "No question received"}), 400
+
             audio_file = request.files['audio']
             question = request.form['question']
-            
-            # Save uploaded audio with timestamp
+            if not audio_file.filename:
+                return jsonify({"error": True, "message": "Empty audio file"}), 400
+
             timestamp = int(time.time())
-            filename = secure_filename(f"recording_{timestamp}.wav")
-            audio_path = os.path.join(UPLOAD_FOLDER, filename)
-            
-            # Ensure upload directory exists
+            original_filename = secure_filename(f"original_{timestamp}.webm")
+            audio_path = os.path.join(UPLOAD_FOLDER, original_filename)
             os.makedirs(os.path.dirname(audio_path), exist_ok=True)
-            
-            # Save the audio file
             audio_file.save(audio_path)
-            logger.debug(f"Saved audio file to: {audio_path}")
-            
-            # Process the audio
-            spoken_text = transcribe_speaking_audio(audio_path)
+
+            converted_filename = f"recording_{timestamp}.wav"
+            converted_path = os.path.join(UPLOAD_FOLDER, converted_filename)
+            if not convert_to_wav(audio_path, converted_path):
+                raise ValueError("Failed to convert audio to WAV format")
+
+            # --- Azure Pronunciation Assessment ---
+            azure_key = os.environ.get("AZURE_SPEECH_KEY")
+            azure_region = os.environ.get("AZURE_SPEECH_REGION")
+            speaking_evaluation = azure_pronunciation_assessment(
+                converted_path, azure_key, azure_region
+            )
+            if not speaking_evaluation:
+                raise ValueError("Failed to evaluate speaking quality")
+
+            spoken_text = speaking_evaluation.get("Transcript", "")
             if not spoken_text:
                 raise ValueError("Failed to transcribe audio")
-            
-            logger.debug(f"Transcribed text: {spoken_text}")
-            
-            # Evaluate the answer
-            result = evaluate_written_answer(spoken_text, question)
-            if not result:
-                raise ValueError("Failed to evaluate answer")
-                
-            # Add transcription to result
-            result['transcript'] = spoken_text
-            
-            # Clean up the audio file
-            try:
-                os.remove(audio_path)
-                logger.debug("Cleaned up audio file")
-            except Exception as e:
-                logger.warning(f"Failed to clean up audio file: {str(e)}")
-            
+
+            from model.evaluate_writing import evaluate_written_answer
+            content_evaluation = evaluate_written_answer(spoken_text, question)
+
+            # Map Azure scores to frontend fields
+            result = {
+                "transcript": spoken_text,
+                "speaking_metrics": {
+                    "Fluency and Coherence": speaking_evaluation.get("Fluency", 0.0),
+                    "Pronunciation": speaking_evaluation.get("Pronunciation", 0.0),
+                    "Overall Band": round(
+                        (speaking_evaluation.get("Fluency", 0.0) +
+                         speaking_evaluation.get("Pronunciation", 0.0) +
+                         speaking_evaluation.get("Accuracy", 0.0) +
+                         speaking_evaluation.get("Completeness", 0.0)) / 4, 1
+                    ),
+                    "Comments": speaking_evaluation.get("Comments", "")
+                },
+                "content_evaluation": content_evaluation,
+                "grade": speaking_evaluation.get("Pronunciation", "N/A"),
+                "score": speaking_evaluation.get("Pronunciation", 0)
+            }
+
+            # Clean up files
+            for path in [audio_path, converted_path]:
+                if path and os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except Exception as cleanup_error:
+                        logger.error(f"Failed to clean up audio file: {cleanup_error}")
+
             return jsonify(result)
-            
+
         except Exception as e:
             logger.error(f"Speaking assessment error: {str(e)}")
-            # Clean up audio file if it exists
-            if audio_path and os.path.exists(audio_path):
-                try:
-                    os.remove(audio_path)
-                except:
-                    pass
+            for path in [audio_path, converted_path]:
+                if path and os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except Exception as cleanup_error:
+                        logger.error(f"Failed to clean up audio file: {cleanup_error}")
             return jsonify({
                 "error": True,
                 "message": str(e),
                 "details": "Failed to process recording"
             }), 500
-    
+
     # GET request - return question
     try:
         question = get_random_question_with_fallback()
-        return render_template("speaking.html", 
-                            current_question=question["question"],
-                            max_time=90)
+        return render_template("speaking.html",
+                               current_question=question["question"],
+                               max_time=90)
     except Exception as e:
         logger.error(f"Error loading speaking assessment: {str(e)}")
-        return render_template("speaking.html", 
-                            error="Failed to load speaking assessment",
-                            current_question="Tell me about your favorite book.")
+        return render_template("speaking.html",
+                               error="Failed to load speaking assessment",
+                               current_question="Tell me about your favorite book.")
 
 def get_random_listening_question():
     """Get random listening question from MongoDB"""
@@ -280,9 +306,22 @@ def listening():
             audio_file.save(audio_path)
             
             try:
-                # Transcribe and evaluate
-                spoken_text = transcribe_listening_audio(audio_path)
+                azure_key = os.environ.get("AZURE_SPEECH_KEY")
+                azure_region = os.environ.get("AZURE_SPEECH_REGION")
+                listening_evaluation = azure_pronunciation_assessment(
+                    audio_path,
+                    azure_key,
+                    azure_region,
+                    reference_text
+                )
+                spoken_text = listening_evaluation.get("Transcript", "")
                 result = evaluate_speaking_similarity(reference_text, spoken_text)
+                result["azure_metrics"] = {
+                    "Accuracy": listening_evaluation.get("Accuracy", 0.0),
+                    "Fluency": listening_evaluation.get("Fluency", 0.0),
+                    "Pronunciation": listening_evaluation.get("Pronunciation", 0.0),
+                    "Completeness": listening_evaluation.get("Completeness", 0.0)
+                }
                 
                 # Only delete file after successful processing
                 os.remove(audio_path)
@@ -351,4 +390,3 @@ def generate_speech_route():
 
 if __name__ == "__main__":
     app.run(debug=True)
-

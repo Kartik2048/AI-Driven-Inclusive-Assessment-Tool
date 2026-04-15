@@ -1,68 +1,13 @@
-# Environment Variables
 .env
-.env.local
-.env.*.local
-
-# Python
+.env.*
+!.env.example
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Virtual Environments
+*.pyc
+.pytest_cache/
+.venv/
 venv/
-ENV/
 env/
-.venv
-
-# IDE / Editor
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.project
-.pydevproject
-.settings/
-*.sublime-project
-*.sublime-workspace
-
-# OS
-.DS_Store
-Thumbs.db
-.directory
-.Spotlight-V100
-.Trashes
-
-# Audio files (uploaded/generated)
-uploads/
-static/audio/*.mp3
-static/audio/*.wav
-
-# Logs
+uploads/audio/*
+static/audio/*
+!.gitkeep
 *.log
-logs/
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
