@@ -10,7 +10,7 @@
         
         <div class="audio-controls">
             <audio id="reference-audio" controls>
-                <source src="{{ url_for('static', filename=audio_file) }}" type="audio/mpeg">
+                <source id="reference-audio-source" src="" type="audio/mpeg">
                 Your browser does not support the audio element.
             </audio>
         </div>
@@ -41,6 +41,36 @@ let mediaRecorder;
 let audioChunks = [];
 let stream;
 let isRecording = false;
+
+async function loadReferenceAudio() {
+    const referenceTextElement = document.getElementById('reference-sentence');
+    const referenceAudio = document.getElementById('reference-audio');
+    const sourceElement = document.getElementById('reference-audio-source');
+
+    if (!referenceTextElement || !sourceElement || !referenceAudio) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/generate-speech', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: referenceTextElement.textContent.trim() })
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.success || !result.audio_url) {
+            throw new Error(result.error || 'Failed to generate reference audio');
+        }
+
+        sourceElement.src = result.audio_url;
+        referenceAudio.load();
+    } catch (error) {
+        console.error('Error loading reference audio:', error);
+        document.getElementById('recordingStatus').textContent =
+            `Audio load error: ${error.message || 'Failed to prepare reference audio'}`;
+    }
+}
 
 document.getElementById('startRecord').addEventListener('click', async () => {
     audioChunks = [];
@@ -146,5 +176,7 @@ function showResult(result) {
 document.getElementById('nextQuestion').addEventListener('click', () => {
     window.location.reload();
 });
+
+loadReferenceAudio();
 </script>
 {% endblock %}

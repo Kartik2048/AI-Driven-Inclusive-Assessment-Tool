@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session, send_from_directory
 from model.evaluate_writing import evaluate_written_answer
 from model.evaluate_speaking import azure_pronunciation_assessment
 from model.evaluate_listening import evaluate_speaking_similarity, generate_speech
@@ -14,6 +14,7 @@ import logging
 import time
 import hashlib
 import subprocess
+import tempfile
 
 def convert_to_wav(input_path, output_path):
     try:
@@ -30,8 +31,10 @@ def convert_to_wav(input_path, output_path):
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'default-secret-key')
-UPLOAD_FOLDER = "uploads/audio"
+UPLOAD_FOLDER = os.path.join(tempfile.gettempdir(), "ai-assessment", "uploads", "audio")
+TTS_FOLDER = os.path.join(tempfile.gettempdir(), "ai-assessment", "tts")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(TTS_FOLDER, exist_ok=True)
 
 # Admin credentials
 ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', 'admin')
@@ -273,20 +276,7 @@ def listening():
             else:
                 reference_text = db_question["question"]
             
-            # Generate unique filename for audio
-            audio_filename = f"reference_{hash(reference_text)}.mp3"
-            audio_path = os.path.join(app.root_path, 'static', 'audio', audio_filename)
-            
-            # Ensure audio directory exists
-            os.makedirs(os.path.dirname(audio_path), exist_ok=True)
-            
-            # Generate audio file
-            if generate_speech(reference_text, audio_path):
-                return render_template("listening.html", 
-                                    reference_text=reference_text,
-                                    audio_file=f"audio/{audio_filename}")
-            else:
-                raise Exception("Failed to generate audio file")
+            return render_template("listening.html", reference_text=reference_text)
                 
         except Exception as e:
             logger.error(f"Error in listening GET: {str(e)}")
@@ -355,13 +345,9 @@ def generate_speech_route():
         if not text:
             return jsonify({"error": "No text provided"}), 400
 
-        # Create audio directory in static folder
-        audio_dir = os.path.join(app.static_folder, 'audio')
-        os.makedirs(audio_dir, exist_ok=True)
-
         # Generate unique filename based on text content
         filename = f"speech_{hashlib.md5(text.encode()).hexdigest()[:10]}.mp3"
-        audio_path = os.path.join(audio_dir, filename)
+        audio_path = os.path.join(TTS_FOLDER, filename)
 
         try:
             # Generate audio file if it doesn't exist
@@ -371,7 +357,7 @@ def generate_speech_route():
 
             return jsonify({
                 "success": True,
-                "audio_url": url_for('static', filename=f'audio/{filename}')
+                "audio_url": url_for('serve_temp_audio', filename=filename)
             })
 
         except Exception as e:
@@ -387,6 +373,10 @@ def generate_speech_route():
             "error": "Server error",
             "details": str(e)
         }), 500
+
+@app.route('/temp-audio/<path:filename>')
+def serve_temp_audio(filename):
+    return send_from_directory(TTS_FOLDER, filename)
 
 if __name__ == "__main__":
     app.run(debug=True)
