@@ -10,17 +10,29 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-# Configure Gemini API
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+client = None
 
-if not GEMINI_API_KEY:
-    logger.error("GEMINI_API_KEY not found in environment variables. Please add it to .env file")
-    raise ValueError("Missing GEMINI_API_KEY. Please set it in your .env file")
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+def get_client():
+    global client
+
+    if client is not None:
+        return client
+
+    gemini_api_key = os.getenv('GEMINI_API_KEY')
+    if not gemini_api_key:
+        logger.warning("GEMINI_API_KEY not found in environment variables.")
+        return None
+
+    client = genai.Client(api_key=gemini_api_key)
+    return client
 
 def evaluate_written_answer(student_answer, question):
     try:
+        llm_client = get_client()
+        if llm_client is None:
+            raise ValueError("GEMINI_API_KEY is not configured")
+
         # Update prompt to be more explicit about required format
         prompt = (
             f"You are an AI tutor evaluating a student's spoken or written answer. "
@@ -38,7 +50,7 @@ def evaluate_written_answer(student_answer, question):
             f"Model Answer: <model answer>"
         )
 
-        response = client.models.generate_content(
+        response = llm_client.models.generate_content(
             model="gemini-2.0-flash",
             contents=prompt,
         )
